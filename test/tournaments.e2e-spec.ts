@@ -24,24 +24,17 @@ describe('Tournaments (e2e)', () => {
     const dataSource = app.get(DataSource);
     await dataSource.query(`UPDATE players SET role = 'admin' WHERE id = $1`, [playerId]);
 
-    const loginRes = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({
-        email: `testt1${Date.now() - 1}@test.com`,
-        password: 'password123',
-      });
-
     const players = await dataSource.query(
       `SELECT id, email FROM players WHERE id = $1 LIMIT 1`,
       [playerId],
     ) as Array<{ id: string; email: string }>;
 
     if (players.length > 0) {
-      const loginRes2 = await request(app.getHttpServer())
+      const loginRes = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: players[0].email, password: 'password123' });
-      if ((loginRes2.body as { data?: { access_token?: string } }).data?.access_token) {
-        token = (loginRes2.body as { data: { access_token: string } }).data.access_token;
+      if ((loginRes.body as { data?: { access_token?: string } }).data?.access_token) {
+        token = (loginRes.body as { data: { access_token: string } }).data.access_token;
       }
     }
 
@@ -146,13 +139,42 @@ describe('Tournaments (e2e)', () => {
         .expect(403);
     });
 
-    it('should update tournament as owner', async () => {
+    it('should update tournament name as owner', async () => {
       const res = await request(app.getHttpServer())
         .put(`/tournaments/${tournamentId}`)
         .set('Authorization', `Bearer ${token}`)
         .send({ name: 'Updated Tournament' })
         .expect(200);
       expect(res.body.data.name).toBe('Updated Tournament');
+    });
+
+    it('should update gameId while pending', async () => {
+      const game2Res = await request(app.getHttpServer())
+        .post('/games')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Game 2', publisher: 'Pub2', releaseDate: '2021-01-01', genre: 'RPG' });
+      const game2Id = (game2Res.body as { data: { id: string } }).data.id;
+
+      const res = await request(app.getHttpServer())
+        .put(`/tournaments/${tournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: game2Id })
+        .expect(200);
+      expect(res.body.data.gameId).toBe(game2Id);
+
+      // restore original gameId
+      await request(app.getHttpServer())
+        .put(`/tournaments/${tournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId });
+    });
+
+    it('should reject unknown gameId update', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${tournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: '00000000-0000-0000-0000-000000000000' })
+        .expect(404);
     });
   });
 
@@ -198,6 +220,136 @@ describe('Tournaments (e2e)', () => {
     });
   });
 
+  describe('Start tournament', () => {
+    let startTournamentId: string;
+    let playerA: { token: string; playerId: string };
+    let playerB: { token: string; playerId: string };
+
+    beforeAll(async () => {
+      playerA = await registerAndLogin(app, 'tsa');
+      playerB = await registerAndLogin(app, 'tsb');
+
+      const res = await request(app.getHttpServer())
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Start Test', maxPlayers: 2, startDate: '2030-01-01T00:00:00Z', gameId })
+        .expect(201);
+      startTournamentId = (res.body as { data: { id: string } }).data.id;
+
+      await request(app.getHttpServer())
+        .post(`/tournaments/${startTournamentId}/join`)
+        .set('Authorization', `Bearer ${playerA.token}`);
+      await request(app.getHttpServer())
+        .post(`/tournaments/${startTournamentId}/join`)
+        .set('Authorization', `Bearer ${playerB.token}`);
+    });
+
+    it('should reject start by non-owner', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token2}`)
+        .send({ status: 'in_progress' })
+        .expect(403);
+    });
+
+    it('should start tournament and generate matches', async () => {
+      const res = await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'in_progress' })
+        .expect(200);
+
+      expect(res.body.data.status).toBe('in_progress');
+
+      const matchesRes = await request(app.getHttpServer())
+        .get(`/tournaments/${startTournamentId}/matches`)
+        .expect(200);
+      expect((matchesRes.body.data as unknown[]).length).toBeGreaterThan(0);
+    });
+
+    it('should reject join after tournament started', async () => {
+      const extra = await registerAndLogin(app, 'tsex');
+      await request(app.getHttpServer())
+        .post(`/tournaments/${startTournamentId}/join`)
+        .set('Authorization', `Bearer ${extra.token}`)
+        .expect(400);
+    });
+
+    it('should reject maxPlayers update after start', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ maxPlayers: 8 })
+        .expect(400);
+    });
+
+    it('should reject startDate update after start', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ startDate: '2031-01-01T00:00:00Z' })
+        .expect(400);
+    });
+
+    it('should reject gameId update after start', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: '00000000-0000-0000-0000-000000000001' })
+        .expect(400);
+    });
+
+    it('should reject delete of started tournament', async () => {
+      await request(app.getHttpServer())
+        .delete(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(400);
+    });
+
+    it('should reject manual set to completed', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'completed' })
+        .expect(400);
+    });
+
+    it('should reject revert to pending after start', async () => {
+      await request(app.getHttpServer())
+        .put(`/tournaments/${startTournamentId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'pending' })
+        .expect(400);
+    });
+  });
+
+  describe('Start tournament — less than 2 players', () => {
+    it('should reject start with 0 players', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/tournaments')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: 'Empty', maxPlayers: 4, startDate: '2030-01-01T00:00:00Z', gameId })
+        .expect(201);
+      const emptyId = (res.body as { data: { id: string } }).data.id;
+
+      await request(app.getHttpServer())
+        .put(`/tournaments/${emptyId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ status: 'in_progress' })
+        .expect(400);
+    });
+  });
+
+  describe('GET /tournaments/:id/matches', () => {
+    it('should return empty array before start', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/tournaments/${tournamentId}/matches`)
+        .expect(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect((res.body.data as unknown[]).length).toBe(0);
+    });
+  });
+
   describe('DELETE /tournaments/:id', () => {
     it('should reject delete without token', async () => {
       await request(app.getHttpServer())
@@ -212,7 +364,7 @@ describe('Tournaments (e2e)', () => {
         .expect(403);
     });
 
-    it('should delete tournament as owner', async () => {
+    it('should delete pending tournament as owner', async () => {
       const newTournament = await request(app.getHttpServer())
         .post('/tournaments')
         .set('Authorization', `Bearer ${token}`)
@@ -224,15 +376,6 @@ describe('Tournaments (e2e)', () => {
         .delete(`/tournaments/${idToDelete}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(204);
-    });
-  });
-
-  describe('GET /tournaments/:id/matches', () => {
-    it('should return matches (empty before start)', async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/tournaments/${tournamentId}/matches`)
-        .expect(200);
-      expect(Array.isArray(res.body.data)).toBe(true);
     });
   });
 });

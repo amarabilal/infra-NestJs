@@ -23,18 +23,20 @@ describe('Games (e2e)', () => {
     playerToken = pToken;
 
     const { token: aToken, playerId } = await registerAndLogin(app, 'ga');
-    adminToken = aToken;
 
     const dataSource = app.get(DataSource);
     await dataSource.query(`UPDATE players SET role = 'admin' WHERE id = $1`, [playerId]);
 
+    const players = await dataSource.query(
+      `SELECT email FROM players WHERE id = $1`,
+      [playerId],
+    ) as Array<{ email: string }>;
+
     const loginRes = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: `testga${playerId.slice(0, 4)}@test.com`, password: 'password123' });
+      .send({ email: players[0].email, password: 'password123' });
 
-    if ((loginRes.body as { data?: { access_token?: string } }).data?.access_token) {
-      adminToken = (loginRes.body as { data: { access_token: string } }).data.access_token;
-    }
+    adminToken = (loginRes.body as { data?: { access_token?: string } }).data?.access_token ?? aToken;
   });
 
   afterAll(async () => {
@@ -71,22 +73,9 @@ describe('Games (e2e)', () => {
     });
 
     it('should create a game as admin', async () => {
-      const dataSource = app.get(DataSource);
-      const players = await dataSource.query(
-        `SELECT id, email FROM players WHERE role = 'admin' LIMIT 1`,
-      ) as Array<{ id: string; email: string }>;
-
-      if (players.length === 0) return;
-
-      const loginRes = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email: players[0].email, password: 'password123' });
-
-      const token = (loginRes.body as { data: { access_token: string } }).data.access_token;
-
       const res = await request(app.getHttpServer())
         .post('/games')
-        .set('Authorization', `Bearer ${token}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send(gameDto)
         .expect(201);
 
@@ -108,9 +97,82 @@ describe('Games (e2e)', () => {
     });
 
     it('should return game by id', async () => {
-      if (!gameId) return;
+      expect(gameId).toBeDefined();
       const res = await request(app.getHttpServer()).get(`/games/${gameId}`).expect(200);
       expect(res.body.data.id).toBe(gameId);
+    });
+  });
+
+  describe('PUT /games/:id', () => {
+    it('should reject without token', async () => {
+      expect(gameId).toBeDefined();
+      await request(app.getHttpServer())
+        .put(`/games/${gameId}`)
+        .send({ name: 'Updated' })
+        .expect(401);
+    });
+
+    it('should reject non-admin player', async () => {
+      expect(gameId).toBeDefined();
+      await request(app.getHttpServer())
+        .put(`/games/${gameId}`)
+        .set('Authorization', `Bearer ${playerToken}`)
+        .send({ name: 'Updated' })
+        .expect(403);
+    });
+
+    it('should update game as admin', async () => {
+      expect(gameId).toBeDefined();
+      const res = await request(app.getHttpServer())
+        .put(`/games/${gameId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Street Fighter 6 Updated' })
+        .expect(200);
+      expect(res.body.data.name).toBe('Street Fighter 6 Updated');
+    });
+
+    it('should return 404 for unknown game', async () => {
+      await request(app.getHttpServer())
+        .put('/games/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Ghost' })
+        .expect(404);
+    });
+  });
+
+  describe('DELETE /games/:id', () => {
+    it('should reject without token', async () => {
+      expect(gameId).toBeDefined();
+      await request(app.getHttpServer())
+        .delete(`/games/${gameId}`)
+        .expect(401);
+    });
+
+    it('should reject non-admin player', async () => {
+      expect(gameId).toBeDefined();
+      await request(app.getHttpServer())
+        .delete(`/games/${gameId}`)
+        .set('Authorization', `Bearer ${playerToken}`)
+        .expect(403);
+    });
+
+    it('should delete game as admin', async () => {
+      // Créer un jeu temporaire pour le supprimer sans affecter les autres tests
+      const tmpRes = await request(app.getHttpServer())
+        .post('/games')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'To Delete', publisher: 'Del', releaseDate: '2020-01-01', genre: 'Misc' })
+        .expect(201);
+      const tmpId = (tmpRes.body as { data: { id: string } }).data.id;
+
+      await request(app.getHttpServer())
+        .delete(`/games/${tmpId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .get(`/games/${tmpId}`)
+        .expect(404);
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   Min,
   IsDateString,
   IsEnum,
+  IsUUID,
   MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -27,6 +28,11 @@ export class UpdateTournamentDto {
   @IsOptional()
   @IsDateString()
   startDate?: string;
+
+  @ApiPropertyOptional({ example: 'uuid-of-game' })
+  @IsOptional()
+  @IsUUID()
+  gameId?: string;
 
   @ApiPropertyOptional({ enum: TournamentStatus })
   @IsOptional()

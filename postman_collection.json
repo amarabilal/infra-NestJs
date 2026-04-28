@@ -1,0 +1,1408 @@
+{
+  "info": {
+    "name": "Tournament API",
+    "_postman_id": "tournament-api-collection",
+    "description": "Collection complète pour l'API de gestion de tournois de jeux vidéo.\n\n## Setup rapide\n1. Importer cette collection dans Postman\n2. Lancer l'API : `docker-compose up --build`\n3. Exécuter **Register Player** → token auto-capturé\n4. Exécuter **Register Admin** puis promouvoir en base :\n   `UPDATE players SET role = 'admin' WHERE email = 'admin@test.com';`\n5. Exécuter **Login Admin** → adminToken auto-capturé\n\nToutes les variables sont stockées dans les variables de collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",      "value": "http://localhost:3000", "type": "string" },
+    { "key": "token",        "value": "", "type": "string", "description": "JWT du joueur courant (auto-capturé)" },
+    { "key": "adminToken",   "value": "", "type": "string", "description": "JWT admin (auto-capturé)" },
+    { "key": "playerId",     "value": "", "type": "string", "description": "ID du joueur courant (auto-capturé)" },
+    { "key": "gameId",       "value": "", "type": "string", "description": "ID du dernier jeu créé (auto-capturé)" },
+    { "key": "tournamentId", "value": "", "type": "string", "description": "ID du dernier tournoi créé (auto-capturé)" },
+    { "key": "matchId",      "value": "", "type": "string", "description": "ID du premier match non-BYE (auto-capturé)" }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "description": "Inscription et connexion. Les tokens sont automatiquement capturés.",
+      "item": [
+        {
+          "name": "Register Player",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.access_token) {",
+                  "    pm.collectionVariables.set('token', json.data.access_token);",
+                  "    console.log('Token player capturé');",
+                  "}",
+                  "if (json.data?.player?.id) {",
+                  "    pm.collectionVariables.set('playerId', json.data.player.id);",
+                  "    console.log('playerId capturé :', json.data.player.id);",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Token présent', () => pm.expect(json.data.access_token).to.be.a('string'));",
+                  "pm.test('Password absent', () => pm.expect(json.data.player.password).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"player_test\",\n  \"email\": \"player@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Register Admin (→ promouvoir en DB)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.player?.id) {",
+                  "    console.log('Admin ID à promouvoir :', json.data.player.id);",
+                  "    console.log('SQL : UPDATE players SET role = \\'admin\\' WHERE id = \\'' + json.data.player.id + '\\';');",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_test\",\n  \"email\": \"admin@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login Player",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.access_token) {",
+                  "    pm.collectionVariables.set('token', json.data.access_token);",
+                  "    console.log('Token player mis à jour');",
+                  "}",
+                  "if (json.data?.player?.id) {",
+                  "    pm.collectionVariables.set('playerId', json.data.player.id);",
+                  "}",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Token présent', () => pm.expect(json.data.access_token).to.be.a('string'));",
+                  "pm.test('Password absent', () => pm.expect(json.data.player.password).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"player@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.access_token) {",
+                  "    pm.collectionVariables.set('adminToken', json.data.access_token);",
+                  "    console.log('Token admin capturé');",
+                  "}",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Token présent', () => pm.expect(json.data.access_token).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login — Mauvais mot de passe (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('success = false', () => pm.expect(pm.response.json().success).to.be.false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"player@test.com\",\n  \"password\": \"mauvais_mdp\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Register — Email dupliqué (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"autre_nom\",\n  \"email\": \"player@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Register — DTO invalide (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"ab\",\n  \"email\": \"pas-un-email\",\n  \"password\": \"123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Players",
+      "description": "CRUD joueurs et statistiques.",
+      "item": [
+        {
+          "name": "Get All Players",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Array retourné', () => pm.expect(json.data).to.be.an('array'));",
+                  "pm.test('Password absent', () => {",
+                  "    if (json.data.length > 0) {",
+                  "        pm.expect(json.data[0].password).to.be.undefined;",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/players", "host": ["{{baseUrl}}"], "path": ["players"] }
+          }
+        },
+        {
+          "name": "Get Player by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ID correct', () => pm.expect(json.data.id).to.equal(pm.collectionVariables.get('playerId')));",
+                  "pm.test('Password absent', () => pm.expect(json.data.password).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/players/{{playerId}}", "host": ["{{baseUrl}}"], "path": ["players", "{{playerId}}"] }
+          }
+        },
+        {
+          "name": "Get Player by ID — 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/players/00000000-0000-0000-0000-000000000000", "host": ["{{baseUrl}}"], "path": ["players", "00000000-0000-0000-0000-000000000000"] }
+          }
+        },
+        {
+          "name": "Get Player by ID — UUID invalide (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/players/not-a-uuid", "host": ["{{baseUrl}}"], "path": ["players", "not-a-uuid"] }
+          }
+        },
+        {
+          "name": "Get Player Tournaments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Array retourné', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/players/{{playerId}}/tournaments", "host": ["{{baseUrl}}"], "path": ["players", "{{playerId}}", "tournaments"] }
+          }
+        },
+        {
+          "name": "Get Player Stats (bonus)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('totalTournaments présent', () => pm.expect(json.data.totalTournaments).to.be.a('number'));",
+                  "pm.test('winRate présent', () => pm.expect(json.data.winRate).to.be.a('number'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/players/{{playerId}}/stats", "host": ["{{baseUrl}}"], "path": ["players", "{{playerId}}", "stats"] }
+          }
+        },
+        {
+          "name": "Update Player Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Password absent', () => pm.expect(json.data.password).to.be.undefined);",
+                  "pm.test('Username mis à jour', () => pm.expect(json.data.username).to.equal('player_updated'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"player_updated\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/players/{{playerId}}", "host": ["{{baseUrl}}"], "path": ["players", "{{playerId}}"] }
+          }
+        },
+        {
+          "name": "Update Player — Sans token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"hacker\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/players/{{playerId}}", "host": ["{{baseUrl}}"], "path": ["players", "{{playerId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎮 Games",
+      "description": "CRUD jeux. POST/PUT/DELETE nécessitent le token admin.",
+      "item": [
+        {
+          "name": "Get All Games",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Array retourné', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Create Game (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.id) {",
+                  "    pm.collectionVariables.set('gameId', json.data.id);",
+                  "    console.log('gameId capturé :', json.data.id);",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Nom correct', () => pm.expect(json.data.name).to.equal('Street Fighter 6'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Street Fighter 6\",\n  \"publisher\": \"Capcom\",\n  \"releaseDate\": \"2023-06-02\",\n  \"genre\": \"Fighting\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Create Game — Sans token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test\",\n  \"publisher\": \"Pub\",\n  \"releaseDate\": \"2020-01-01\",\n  \"genre\": \"FPS\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Create Game — Non-admin (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test\",\n  \"publisher\": \"Pub\",\n  \"releaseDate\": \"2020-01-01\",\n  \"genre\": \"FPS\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Create Game — DTO invalide (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Pas de publisher\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/games", "host": ["{{baseUrl}}"], "path": ["games"] }
+          }
+        },
+        {
+          "name": "Get Game by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ID correct', () => pm.expect(pm.response.json().data.id).to.equal(pm.collectionVariables.get('gameId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}"] }
+          }
+        },
+        {
+          "name": "Get Game by ID — 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/games/00000000-0000-0000-0000-000000000000", "host": ["{{baseUrl}}"], "path": ["games", "00000000-0000-0000-0000-000000000000"] }
+          }
+        },
+        {
+          "name": "Get Game by ID — UUID invalide (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/games/not-a-uuid", "host": ["{{baseUrl}}"], "path": ["games", "not-a-uuid"] }
+          }
+        },
+        {
+          "name": "Update Game (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nom mis à jour', () => pm.expect(pm.response.json().data.name).to.equal('Street Fighter 6 Championship'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Street Fighter 6 Championship\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}"] }
+          }
+        },
+        {
+          "name": "Update Game — Non-admin (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tentative\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}"] }
+          }
+        },
+        {
+          "name": "Delete Game (admin)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Crée un jeu temporaire avant de le supprimer",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                  "const adminToken = pm.collectionVariables.get('adminToken');",
+                  "pm.sendRequest({",
+                  "    url: baseUrl + '/games',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ name: 'Game To Delete', publisher: 'Del', releaseDate: '2020-01-01', genre: 'Misc' }) }",
+                  "}, (err, res) => {",
+                  "    const id = res.json().data?.id;",
+                  "    if (id) pm.collectionVariables.set('_tmpGameId', id);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/games/{{_tmpGameId}}", "host": ["{{baseUrl}}"], "path": ["games", "{{_tmpGameId}}"] }
+          }
+        },
+        {
+          "name": "Delete Game — Non-admin (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/games/{{gameId}}", "host": ["{{baseUrl}}"], "path": ["games", "{{gameId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏆 Tournaments",
+      "description": "CRUD tournois, inscription, démarrage.",
+      "item": [
+        {
+          "name": "Get All Tournaments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success = true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "pm.test('Array retourné', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tournaments", "host": ["{{baseUrl}}"], "path": ["tournaments"] }
+          }
+        },
+        {
+          "name": "Get Tournaments — Filtre status=pending",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tous pending', () => {",
+                  "    json.data.forEach(t => pm.expect(t.status).to.equal('pending'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tournaments?status=pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["tournaments"],
+              "query": [{ "key": "status", "value": "pending" }]
+            }
+          }
+        },
+        {
+          "name": "Get Tournaments — Filtre status invalide (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tournaments?status=invalid",
+              "host": ["{{baseUrl}}"],
+              "path": ["tournaments"],
+              "query": [{ "key": "status", "value": "invalid" }]
+            }
+          }
+        },
+        {
+          "name": "Create Tournament",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.data?.id) {",
+                  "    pm.collectionVariables.set('tournamentId', json.data.id);",
+                  "    console.log('tournamentId capturé :', json.data.id);",
+                  "}",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Status = pending', () => pm.expect(json.data.status).to.equal('pending'));",
+                  "pm.test('gameId correct', () => pm.expect(json.data.gameId).to.equal(pm.collectionVariables.get('gameId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"World Championship 2025\",\n  \"maxPlayers\": 4,\n  \"startDate\": \"2030-01-01T18:00:00Z\",\n  \"gameId\": \"{{gameId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments", "host": ["{{baseUrl}}"], "path": ["tournaments"] }
+          }
+        },
+        {
+          "name": "Create Tournament — Sans token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"T\",\n  \"maxPlayers\": 4,\n  \"startDate\": \"2030-01-01T18:00:00Z\",\n  \"gameId\": \"{{gameId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments", "host": ["{{baseUrl}}"], "path": ["tournaments"] }
+          }
+        },
+        {
+          "name": "Create Tournament — maxPlayers < 2 (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mauvais\",\n  \"maxPlayers\": 1,\n  \"startDate\": \"2030-01-01T18:00:00Z\",\n  \"gameId\": \"{{gameId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments", "host": ["{{baseUrl}}"], "path": ["tournaments"] }
+          }
+        },
+        {
+          "name": "Create Tournament — gameId inconnu (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sans jeu\",\n  \"maxPlayers\": 4,\n  \"startDate\": \"2030-01-01T18:00:00Z\",\n  \"gameId\": \"00000000-0000-0000-0000-000000000000\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments", "host": ["{{baseUrl}}"], "path": ["tournaments"] }
+          }
+        },
+        {
+          "name": "Get Tournament by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ID correct', () => pm.expect(json.data.id).to.equal(pm.collectionVariables.get('tournamentId')));",
+                  "pm.test('game présent', () => pm.expect(json.data.game).to.be.an('object'));",
+                  "pm.test('players présent', () => pm.expect(json.data.players).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Get Tournament by ID — 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tournaments/00000000-0000-0000-0000-000000000000", "host": ["{{baseUrl}}"], "path": ["tournaments", "00000000-0000-0000-0000-000000000000"] }
+          }
+        },
+        {
+          "name": "Update Tournament — Nom",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nom mis à jour', () => pm.expect(pm.response.json().data.name).to.equal('World Championship 2025 — Edition Spéciale'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"World Championship 2025 — Edition Spéciale\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Update Tournament — Non-propriétaire (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tentative de hijack\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Join Tournament",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Player dans la liste', () => {",
+                  "    const players = pm.response.json().data.players;",
+                  "    const playerId = pm.collectionVariables.get('playerId');",
+                  "    pm.expect(players.some(p => p.id === playerId)).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}/join", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}", "join"] }
+          }
+        },
+        {
+          "name": "Join Tournament — Doublon (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}/join", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}", "join"] }
+          }
+        },
+        {
+          "name": "Join Tournament — Sans token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}/join", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}", "join"] }
+          }
+        },
+        {
+          "name": "Get Tournament Matches (avant démarrage — vide)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Array retourné', () => pm.expect(json.data).to.be.an('array'));",
+                  "pm.test('Vide avant démarrage', () => pm.expect(json.data.length).to.equal(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}/matches", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}", "matches"] }
+          }
+        },
+        {
+          "name": "Start Tournament (status → in_progress)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status = in_progress', () => pm.expect(pm.response.json().data.status).to.equal('in_progress'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Get Tournament Matches (après démarrage)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Matchs générés', () => pm.expect(json.data.length).to.be.greaterThan(0));",
+                  "",
+                  "// Capturer le premier match non-BYE",
+                  "const realMatch = json.data.find(m => !m.isBye);",
+                  "if (realMatch) {",
+                  "    pm.collectionVariables.set('matchId', realMatch.id);",
+                  "    pm.collectionVariables.set('_matchPlayer1Id', realMatch.player1Id);",
+                  "    console.log('matchId capturé :', realMatch.id);",
+                  "    console.log('player1Id du match :', realMatch.player1Id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}/matches", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}", "matches"] }
+          }
+        },
+        {
+          "name": "Join — Après démarrage (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}/join", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}", "join"] }
+          }
+        },
+        {
+          "name": "Update maxPlayers — Après démarrage (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"maxPlayers\": 16\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Set status=completed manuellement (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Delete Tournament — Après démarrage (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        },
+        {
+          "name": "Delete Tournament — Pending (204)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Crée un tournoi temporaire à supprimer",
+                  "const baseUrl = pm.collectionVariables.get('baseUrl');",
+                  "const adminToken = pm.collectionVariables.get('adminToken');",
+                  "const gameId = pm.collectionVariables.get('gameId');",
+                  "pm.sendRequest({",
+                  "    url: baseUrl + '/tournaments',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ name: 'A supprimer', maxPlayers: 4, startDate: '2030-01-01T00:00:00Z', gameId }) }",
+                  "}, (err, res) => {",
+                  "    const id = res.json().data?.id;",
+                  "    if (id) pm.collectionVariables.set('_tmpTournamentId', id);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/tournaments/{{_tmpTournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{_tmpTournamentId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚔️ Matches",
+      "description": "Soumission de résultats. matchId et _matchPlayer1Id sont auto-capturés par 'Get Tournament Matches (après démarrage)'.",
+      "item": [
+        {
+          "name": "Submit Result — Sans token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"winnerId\": \"00000000-0000-0000-0000-000000000000\",\n  \"score\": \"3-1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/matches/{{matchId}}/result", "host": ["{{baseUrl}}"], "path": ["matches", "{{matchId}}", "result"] }
+          }
+        },
+        {
+          "name": "Submit Result — winnerId pas dans le match (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"winnerId\": \"00000000-0000-0000-0000-000000000000\",\n  \"score\": \"3-1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/matches/{{matchId}}/result", "host": ["{{baseUrl}}"], "path": ["matches", "{{matchId}}", "result"] }
+          }
+        },
+        {
+          "name": "Submit Result — DTO invalide (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"winnerId\": \"pas-un-uuid\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/matches/{{matchId}}/result", "host": ["{{baseUrl}}"], "path": ["matches", "{{matchId}}", "result"] }
+          }
+        },
+        {
+          "name": "Submit Result — Match 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"winnerId\": \"00000000-0000-0000-0000-000000000001\",\n  \"score\": \"3-1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/matches/00000000-0000-0000-0000-000000000000/result", "host": ["{{baseUrl}}"], "path": ["matches", "00000000-0000-0000-0000-000000000000", "result"] }
+          }
+        },
+        {
+          "name": "Submit Result ✅ (admin — player1 gagne)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Match completed', () => pm.expect(json.data.status).to.equal('completed'));",
+                  "pm.test('winnerId = player1', () => pm.expect(json.data.winnerId).to.equal(pm.collectionVariables.get('_matchPlayer1Id')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"winnerId\": \"{{_matchPlayer1Id}}\",\n  \"score\": \"3-1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/matches/{{matchId}}/result", "host": ["{{baseUrl}}"], "path": ["matches", "{{matchId}}", "result"] }
+          }
+        },
+        {
+          "name": "Submit Result — Match déjà terminé (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"winnerId\": \"{{_matchPlayer1Id}}\",\n  \"score\": \"2-0\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/matches/{{matchId}}/result", "host": ["{{baseUrl}}"], "path": ["matches", "{{matchId}}", "result"] }
+          }
+        },
+        {
+          "name": "Vérifier tournoi finalisé",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tournoi completed', () => pm.expect(json.data.status).to.equal('completed'));",
+                  "pm.test('winnerId renseigné', () => pm.expect(json.data.winnerId).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/tournaments/{{tournamentId}}", "host": ["{{baseUrl}}"], "path": ["tournaments", "{{tournamentId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔎 Swagger",
+      "item": [
+        {
+          "name": "Swagger UI disponible",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Contient Swagger', () => pm.expect(pm.response.text()).to.include('Swagger'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api", "host": ["{{baseUrl}}"], "path": ["api"] }
+          }
+        },
+        {
+          "name": "Swagger JSON (OpenAPI spec)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('OpenAPI 3.x', () => pm.expect(pm.response.json().openapi).to.match(/^3\\./))"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api-json", "host": ["{{baseUrl}}"], "path": ["api-json"] }
+          }
+        }
+      ]
+    }
+  ]
+}

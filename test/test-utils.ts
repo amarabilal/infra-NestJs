@@ -78,19 +78,3 @@ export async function registerAndLogin(
   };
 }
 
-export async function createAdminAndLogin(
-  app: INestApplication,
-): Promise<{ token: string; playerId: string }> {
-  const { token: adminToken, playerId } = await registerAndLogin(app, 'admin');
-
-  const dataSource = app.get('DataSource') as { getRepository: (entity: unknown) => { update: (id: string, data: object) => Promise<void> } };
-  const playerRepo = dataSource.getRepository('players');
-  await playerRepo.update(playerId, { role: 'admin' });
-
-  const email = `testadmin${Date.now()}@test.com`;
-  const res2 = await request(app.getHttpServer())
-    .post('/auth/login')
-    .send({ email, password: 'password123' });
-
-  return { token: (res2.body as { data: { access_token: string } })?.data?.access_token ?? adminToken, playerId };
-}

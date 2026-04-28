@@ -126,13 +126,29 @@ http://localhost:3000/api
 
 ## Règles métier
 
-- Un tournoi démarre avec au moins **2 joueurs inscrits**
+### Règles sur les tournois
+
+- Créé automatiquement en statut `pending`
+- Un tournoi démarre avec au moins **2 joueurs inscrits** en envoyant `PUT /tournaments/:id { "status": "in_progress" }`
 - Au démarrage, les matchs sont générés automatiquement (bracket)
-- Les nombres impairs sont gérés par un système **BYE**
+- Les nombres impairs de joueurs sont gérés par un système **BYE** (le joueur seul avance automatiquement)
 - Le bracket progresse automatiquement à chaque round complet
 - Seul le **créateur** ou un **admin** peut modifier/supprimer/démarrer un tournoi
-- La suppression est interdite si le tournoi a déjà commencé
-- Le `password` n'est jamais retourné par l'API
+- **Champs modifiables uniquement en statut `pending`** : `maxPlayers`, `startDate`, `gameId`
+- **Suppression interdite** si le tournoi a déjà commencé ou est terminé
+- Le statut `completed` est **définitif** — impossible de le modifier ou de revenir en arrière
+
+### Règles sur les matchs
+
+- Un match BYE ne peut pas recevoir de résultat
+- Seuls le créateur du tournoi, un admin ou l'un des deux joueurs du match peuvent soumettre un résultat
+- Le `winnerId` doit obligatoirement être l'un des deux joueurs du match
+- Impossible de soumettre un résultat sur un match déjà terminé (409)
+- Impossible de soumettre un résultat si le tournoi n'est pas en cours (400)
+
+### Sécurité des données
+
+- Le `password` n'est jamais retourné par l'API (ni dans les réponses, ni dans Swagger)
 
 ---
 

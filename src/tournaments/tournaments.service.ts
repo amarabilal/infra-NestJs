@@ -114,6 +114,19 @@ export class TournamentsService {
       throw new BadRequestException('Cannot manually set tournament to completed');
     }
 
+    if (dto.status === TournamentStatus.PENDING && tournament.status !== TournamentStatus.PENDING) {
+      throw new BadRequestException('Cannot revert tournament status to pending');
+    }
+
+    if (dto.gameId !== undefined) {
+      if (tournament.status !== TournamentStatus.PENDING) {
+        throw new BadRequestException('Cannot modify game after tournament has started');
+      }
+      const game = await this.gameRepository.findOne({ where: { id: dto.gameId } });
+      if (!game) throw new NotFoundException(`Game ${dto.gameId} not found`);
+      tournament.gameId = dto.gameId;
+    }
+
     if (dto.name !== undefined) tournament.name = dto.name;
     if (dto.maxPlayers !== undefined) tournament.maxPlayers = dto.maxPlayers;
     if (dto.startDate !== undefined) tournament.startDate = new Date(dto.startDate);
